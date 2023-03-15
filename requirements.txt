@@ -2,3 +2,5 @@ Flask==2.2.3
 Pillow==9.4.0
 tensorflow==2.11.0
 Flask-Cors==3.0.10
+Gunicorn==20.1.0
+Uvicorn==0.18.3
