@@ -211,10 +211,15 @@ def predict(filename , model):
 
 
 
-@app.route('/')
+@app.route('/home',methods = ['GET'])
 @cross_origin(supports_credentials=True)
 def home():
-        return render_template("index.html")
+        temp={
+            'message':'hello'
+        }
+        print("Recieved fake request")
+        temp=jsonify(temp)
+        return temp
 
 @app.route('/success' , methods = ['GET' , 'POST'])
 @cross_origin(supports_credentials=True)
