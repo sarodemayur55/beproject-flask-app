@@ -9,6 +9,19 @@ from flask import Flask , render_template  , request , send_file
 from tensorflow.keras.preprocessing.image import load_img , img_to_array
 from flask import jsonify
 from flask_cors import CORS, cross_origin
+
+
+# Integrating Actual Model
+import cv2
+# import pandas as pd
+import numpy as np
+
+import skimage
+import warnings
+import joblib
+warnings.filterwarnings("ignore")
+
+
 app = Flask(__name__)
 app.config['JSON_SORT_KEYS'] = False
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -19,12 +32,154 @@ CORS(app, support_credentials=True)
 
 
 
-ALLOWED_EXT = set(['jpg' , 'jpeg' , 'png' , 'jfif'])
+ALLOWED_EXT = set(['jpg' , 'jpeg' , 'png' , 'jfif','JPG','JPEG'])
 def allowed_file(filename):
     return '.' in filename and \
            filename.rsplit('.', 1)[1] in ALLOWED_EXT
 
 classes = ['airplane' ,'automobile', 'bird' , 'cat' , 'deer' ,'dog' ,'frog', 'horse' ,'ship' ,'truck']
+
+loaded_rf = joblib.load("./mymodel.joblib")
+
+
+def segment(filepath):
+    result={}
+    X = cv2.imread(filepath)
+
+    # cv2_imshow(X)
+
+    # Convert the image to grayscale
+    gray_img = cv2.cvtColor(X, cv2.COLOR_BGR2GRAY)
+
+    # Perform adaptive thresholding
+    x,thresholded_img = cv2.threshold(gray_img, 140, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C + cv2.THRESH_BINARY)
+
+
+    # Dilate the mask with a square structuring element
+    width = 9
+    kernel = np.ones((width, width), np.uint8)
+    dilated_img = cv2.dilate(thresholded_img, kernel)
+
+    # Erode the mask with a square structuring element
+    eroded_img = cv2.erode(dilated_img, kernel)
+
+
+    # Specify the desired display width and height
+    display_width = 4000
+    display_height = 3000
+
+    # Calculate the resize ratio
+    resize_ratio = min(display_width / eroded_img.shape[1], display_height / eroded_img.shape[0])
+
+    # Resize the image for display
+    resized_img = cv2.resize(eroded_img, (0, 0), fx=resize_ratio, fy=resize_ratio)
+
+    # Display the resized image
+    # cv2_imshow(resized_img)
+
+
+    # Find contours in the binary image
+    contours, _ = cv2.findContours(eroded_img, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+
+    # Calculate bounding boxes for each contour
+    bounding_boxes = []
+    for contour in contours:
+        x, y, w, h = cv2.boundingRect(contour)
+        bounding_boxes.append((x, y, w, h))
+
+    properties2 = np.array(bounding_boxes, dtype=np.int)
+
+    # print(properties2)
+
+
+
+
+    # Define the path to save the cropped images within Colab
+    # !s2
+    path = './segment/'
+    
+
+    img = cv2.imread(filepath)
+    # Create the directory to store the cropped images if it doesn't exist
+    if not os.path.exists(path):
+        os.makedirs(path)
+
+    # Iterate over each row in 'properties2'
+    for row in range(properties2.shape[0]):
+        x = int(properties2[row, 0]) - 15
+        y = int(properties2[row, 1]) - 15
+        w = int(properties2[row, 2]) + 30
+        h = int(properties2[row, 3]) + 30
+
+        # Crop the region of interest
+        # print(img.shape)
+        temp = img[y:y+h, x:x+w]
+        # print(temp)
+
+        # Generate the filename for the cropped image
+        imgnumber = row + 100
+        filename = str(imgnumber) + '.png'
+        s = os.path.join(path, filename)
+        # print(s)
+        # print(type(temp))
+
+        if(temp.size==0):
+          break
+        cv2.imwrite(s, temp)
+        curr=actualpredict(s)
+        # print(curr)
+        try:
+            result[curr] += 1
+        except KeyError:
+            result[curr] = 1
+        # result[curr]=result.get('curr',0)+1
+        # Save the cropped image in Colab's local file system
+        
+    return result
+
+
+def actualpredict(filepath):
+    feature_data = []
+    image = cv2.imread(filepath)
+
+    # Extract color features
+    color_mean = np.mean(image, axis=(0, 1))
+    color_std = np.std(image, axis=(0, 1))
+
+    # Convert the image to grayscale
+    gray_image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+
+    # Extract texture features
+    glcm = skimage.feature.graycomatrix(gray_image, distances=[1], angles=[0], levels=256, symmetric=True, normed=True)
+    contrast = skimage.feature.graycoprops(glcm, 'contrast')[0, 0]
+    energy = skimage.feature.graycoprops(glcm, 'energy')[0, 0]
+
+    # Extract shape features
+    contours, _ = cv2.findContours(gray_image, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    contour = max(contours, key=cv2.contourArea)
+    area = cv2.contourArea(contour)
+    perimeter = cv2.arcLength(contour, True)
+
+    # Extract edge features
+    edges = cv2.Canny(gray_image, 100, 200)
+    num_edge_pixels = np.count_nonzero(edges) // 255
+
+    # Append the features, image name, and class name to the dataset
+    feature_data.append([
+        *color_mean, *color_std,
+        contrast, energy,
+        area, perimeter,
+        num_edge_pixels,
+
+    ])
+
+    feature_vector=np.array(feature_data)
+    # Make predictions on the feature vector
+    pred=loaded_rf.predict(feature_vector)
+    # print(pred[-1])
+    return pred[-1]
+
+
 
 
 def predict(filename , model):
@@ -109,11 +264,22 @@ def success():
             # return temp
             file = request.files['file']
             if file and allowed_file(file.filename):
+                # temp=jsonify(message="Success123")
+                # return temp
                 file.save(os.path.join(target_img , file.filename))
                 img_path = os.path.join(target_img , file.filename)
                 img = file.filename
 
-                class_result , prob_result = predict(img_path , model)
+                # class_result , prob_result = predict(img_path , model)
+                final=segment(img_path)
+                final = dict(sorted(final.items(), key=lambda x: x[1], reverse=True))
+                print(final)
+                # result=actualpredict(img_path)
+                temp=jsonify(final)
+                # temp=jsonify(message="Hello")
+                return temp
+
+
                 # return prob_result
                 predictions = {
                     #   "class1":class_result[0],
@@ -144,6 +310,6 @@ def success():
             return temp
 
 if __name__ == "__main__":
-    app.run(debug=True, port=8000)
+    app.run(host='0.0.0.0', port=8000)
 
 
