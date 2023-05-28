@@ -4,9 +4,9 @@ import uuid
 import flask
 import urllib
 from PIL import Image
-from tensorflow.keras.models import load_model
+# from tensorflow.keras.models import load_model
 from flask import Flask , render_template  , request , send_file
-from tensorflow.keras.preprocessing.image import load_img , img_to_array
+# from tensorflow.keras.preprocessing.image import load_img , img_to_array
 from flask import jsonify
 from flask_cors import CORS, cross_origin
 
@@ -25,7 +25,7 @@ warnings.filterwarnings("ignore")
 app = Flask(__name__)
 app.config['JSON_SORT_KEYS'] = False
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-model = load_model(os.path.join(BASE_DIR , 'model.hdf5'))
+model = 0
 
 # Allowing CORS
 CORS(app, support_credentials=True)
@@ -183,28 +183,28 @@ def actualpredict(filepath):
 
 
 def predict(filename , model):
-    img = load_img(filename , target_size = (32 , 32))
-    img = img_to_array(img)
-    img = img.reshape(1 , 32 ,32 ,3)
+    # img = load_img(filename , target_size = (32 , 32))
+    # img = img_to_array(img)
+    # img = img.reshape(1 , 32 ,32 ,3)
 
-    img = img.astype('float32')
-    img = img/255.0
-    result = model.predict(img)
-    print(result, file=sys.stderr)
-    dict_result = {}
-    for i in range(10):
-        dict_result[result[0][i]] = classes[i]
+    # img = img.astype('float32')
+    # img = img/255.0
+    # result = model.predict(img)
+    # print(result, file=sys.stderr)
+    # dict_result = {}
+    # for i in range(10):
+    #     dict_result[result[0][i]] = classes[i]
 
-    res = result[0]
-    res.sort()
-    res = res[::-1]
-    prob = res[:3]
+    # res = result[0]
+    # res.sort()
+    # res = res[::-1]
+    # prob = res[:3]
     
     prob_result = []
     class_result = []
-    for i in range(3):
-        prob_result.append((prob[i]*100).round(2))
-        class_result.append(dict_result[prob[i]])
+    # for i in range(3):
+    #     prob_result.append((prob[i]*100).round(2))
+    #     class_result.append(dict_result[prob[i]])
 
     return class_result , prob_result
 
